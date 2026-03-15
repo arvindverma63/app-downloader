@@ -1,38 +1,42 @@
 <?php
-session_start();
+// 1. CONFIGURATION & DIRECTORY SETUP
 $uploadBaseDir = 'uploads/';
 if (!is_dir($uploadBaseDir)) mkdir($uploadBaseDir, 0777, true);
 
-// 1. Get or Create the Permanent ID
+// Get the ID from URL or generate a new one if it's a fresh visit
+// This ID is the "Permanent" part of your link
 $sharingId = isset($_GET['id']) ? basename($_GET['id']) : bin2hex(random_bytes(6));
 $targetDir = $uploadBaseDir . $sharingId . '/';
+
 if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
 
-// 2. Handle File Uploads
+// 2. HANDLE UPLOAD / UPDATE
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['myFiles'])) {
     foreach ($_FILES['myFiles']['tmp_name'] as $key => $tmpName) {
         if ($_FILES['myFiles']['error'][$key] == 0) {
             $name = basename($_FILES['myFiles']['name'][$key]);
+            // Moving the file to the fixed sharing ID folder
             move_uploaded_file($tmpName, $targetDir . $name);
         }
     }
-    header("Location: panel.php?id=$sharingId");
+    header("Location: panel.php?id=$sharingId&msg=updated");
     exit;
 }
 
-// 3. Handle File Deletion (The "Edit" part)
+// 3. HANDLE DELETE (EDITING THE BUCKET)
 if (isset($_GET['delete'])) {
     $fileToDelete = basename($_GET['delete']);
     if (file_exists($targetDir . $fileToDelete)) {
         unlink($targetDir . $fileToDelete);
     }
-    header("Location: panel.php?id=$sharingId");
+    header("Location: panel.php?id=$sharingId&msg=deleted");
     exit;
 }
 
-// 4. Scan for existing files
+// 4. GET FILE LIST
 $files = array_diff(scandir($targetDir), array('.', '..'));
-$currentUrl = (isset($_SERVER['HTTPS']) ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+$protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http");
+$permanentLink = $protocol . "://" . $_SERVER['HTTP_HOST'] . explode('?', $_SERVER['REQUEST_URI'])[0] . "?id=" . $sharingId;
 ?>
 
 <!DOCTYPE html>
@@ -40,91 +44,86 @@ $currentUrl = (isset($_SERVER['HTTPS']) ? "https" : "http") . "://$_SERVER[HTTP_
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Management Panel</title>
+    <title>Permanent File Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
-<body class="bg-slate-50 min-h-screen py-12 px-4">
+<body class="bg-gray-100 min-h-screen p-4 md:p-10">
 
-    <div class="max-w-4xl mx-auto">
-        <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+    <div class="max-w-4xl mx-auto bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200">
+        <div class="bg-slate-900 p-6 text-white flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-link text-blue-400"></i> Permanent Link Panel
+                </h1>
+                <p class="text-gray-400 text-xs mt-1 font-mono"><?= $permanentLink ?></p>
+            </div>
+            <button onclick="copyToClipboard('<?= $permanentLink ?>')" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                <i class="fa-solid fa-copy"></i> Copy Link
+            </button>
+        </div>
 
-            <div class="md:flex">
-                <div class="md:w-1/3 bg-indigo-700 p-8 text-white">
-                    <div class="mb-8">
-                        <i class="fa-solid fa-folder-tree text-4xl mb-4"></i>
-                        <h1 class="text-2xl font-bold">File Panel</h1>
-                        <p class="text-indigo-200 text-sm">Manage your permanent share link.</p>
-                    </div>
-
+        <div class="p-6 md:p-10">
+            <form action="" method="POST" enctype="multipart/form-data" class="mb-10">
+                <label class="relative group block w-full border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer">
+                    <input type="file" name="myFiles[]" multiple class="hidden" onchange="this.form.submit()">
                     <div class="space-y-4">
-                        <div class="bg-indigo-800/50 p-4 rounded-xl border border-indigo-400/30">
-                            <p class="text-xs uppercase font-bold tracking-wider text-indigo-300 mb-2">Share Link</p>
-                            <input type="text" readonly value="<?= $currentUrl ?>" id="shareUrl" class="w-full bg-transparent text-sm truncate focus:outline-none">
-                            <button onclick="copyLink()" class="mt-2 text-xs bg-white text-indigo-700 px-3 py-1 rounded font-bold hover:bg-indigo-50 transition">
-                                <i class="fa-solid fa-copy mr-1"></i> Copy Link
-                            </button>
+                        <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto group-hover:scale-110 transition">
+                            <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-lg font-semibold text-gray-700">Upload or Update Files</p>
+                            <p class="text-gray-500 text-sm">The link above will always contain these files.</p>
                         </div>
                     </div>
-                </div>
+                </label>
+            </form>
 
-                <div class="md:w-2/3 p-8">
-                    <form action="" method="POST" enctype="multipart/form-data" class="mb-10">
-                        <div class="group relative border-2 border-dashed border-slate-200 rounded-2xl p-6 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-center">
-                            <input type="file" name="myFiles[]" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="this.form.submit()">
-                            <div class="space-y-2">
-                                <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 group-hover:text-indigo-500"></i>
-                                <p class="text-slate-600 font-medium">Drop files here or click to upload</p>
-                                <p class="text-xs text-slate-400">Multiple files supported</p>
-                            </div>
-                        </div>
-                    </form>
+            <div class="space-y-4">
+                <h3 class="text-gray-800 font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-list-ul"></i> Managed Files (<?= count($files) ?>)
+                </h3>
 
-                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center justify-between">
-                        Your Files
-                        <span class="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-500"><?= count($files) ?> Files</span>
-                    </h2>
-
-                    <?php if (empty($files)): ?>
-                        <div class="text-center py-10">
-                            <i class="fa-solid fa-ghost text-slate-200 text-5xl mb-3"></i>
-                            <p class="text-slate-400">No files uploaded yet.</p>
-                        </div>
-                    <?php else: ?>
-                        <div class="grid gap-3">
-                            <?php foreach ($files as $file): ?>
-                                <div class="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-white hover:shadow-md transition">
-                                    <div class="flex items-center gap-3 truncate">
-                                        <div class="bg-amber-100 p-2 rounded-lg">
-                                            <i class="fa-solid fa-file text-amber-600"></i>
-                                        </div>
-                                        <span class="text-sm font-semibold text-slate-700 truncate"><?= $file ?></span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <a href="download.php?dir=<?= $sharingId ?>&file=<?= $file ?>" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="Download">
-                                            <i class="fa-solid fa-download"></i>
-                                        </a>
-                                        <a href="?id=<?= $sharingId ?>&delete=<?= $file ?>" class="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition" onclick="return confirm('Delete this file?')" title="Delete">
-                                            <i class="fa-solid fa-trash-can"></i>
-                                        </a>
+                <?php if (empty($files)): ?>
+                    <div class="text-center py-20 border-2 border-dotted border-gray-100 rounded-xl">
+                        <p class="text-gray-400 italic">This bucket is empty. Upload something to start.</p>
+                    </div>
+                <?php else: ?>
+                    <div class="grid gap-3">
+                        <?php foreach ($files as $file): ?>
+                            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-white hover:shadow-md border border-transparent hover:border-gray-200 transition">
+                                <div class="flex items-center gap-4 min-w-0">
+                                    <i class="fa-solid fa-file-lines text-2xl text-blue-500"></i>
+                                    <div class="truncate">
+                                        <p class="font-medium text-gray-800 truncate"><?= $file ?></p>
+                                        <p class="text-[10px] text-gray-400 uppercase tracking-tighter">Verified File</p>
                                     </div>
                                 </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
+                                <div class="flex items-center gap-2">
+                                    <a href="download.php?dir=<?= $sharingId ?>&file=<?= urlencode($file) ?>"
+                                        class="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                        <i class="fa-solid fa-download"></i>
+                                    </a>
+                                    <a href="?id=<?= $sharingId ?>&delete=<?= urlencode($file) ?>"
+                                        onclick="return confirm('Remove this file from the link?')"
+                                        class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
     <script>
-        function copyLink() {
-            var copyText = document.getElementById("shareUrl");
-            copyText.select();
-            document.execCommand("copy");
-            alert("Link copied to clipboard!");
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Link copied! Use this link to manage these files anytime.");
+            });
         }
     </script>
 </body>
