@@ -1,20 +1,30 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['myFile'])) {
-    $uploadDir = 'uploads/';
-    $originalName = basename($_FILES['myFile']['name']);
-    
-    // Generate a unique, unchangeable hash for the link
-    $fileId = bin2hex(random_bytes(16)); 
-    $extension = pathinfo($originalName, PATHINFO_EXTENSION);
-    $newName = $fileId . '.' . $extension;
+session_start();
 
-    if (move_uploaded_file($_FILES['myFile']['tmp_name'], $uploadDir . $newName)) {
-        // In a real app, store $fileId and $originalName in a database here.
-        $downloadLink = "download.php?id=" . $newName;
-        echo "File uploaded successfully!<br>";
-        echo "Permanent Link: <a href='$downloadLink'>$downloadLink</a>";
-    } else {
-        echo "Upload failed.";
+$uploadBaseDir = 'uploads/';
+if (!is_dir($uploadBaseDir)) mkdir($uploadBaseDir, 0777, true);
+
+// 1. Determine the Unique ID (The permanent part of the URL)
+// If editing, use the existing ID. If new, generate a random hex.
+$sharingId = isset($_POST['sharing_id']) ? basename($_POST['sharing_id']) : bin2hex(random_bytes(8));
+$targetDir = $uploadBaseDir . $sharingId . '/';
+
+if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
+
+$uploadedFiles = [];
+
+// 2. Handle Multiple Files
+if (!empty($_FILES['myFiles']['name'][0])) {
+    foreach ($_FILES['myFiles']['tmp_name'] as $key => $tmpName) {
+        $originalName = basename($_FILES['myFiles']['name'][$key]);
+        $safeName = preg_replace("/[^a-zA-Z0-9.]/", "_", $originalName); // Clean filename
+
+        if (move_uploaded_file($tmpName, $targetDir . $safeName)) {
+            $uploadedFiles[] = $safeName;
+        }
     }
 }
-?>
+
+// Redirect back to the UI with the permanent ID
+header("Location: index.php?id=" . $sharingId . "&status=success");
+exit;

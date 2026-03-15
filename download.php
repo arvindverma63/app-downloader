@@ -1,22 +1,14 @@
 <?php
-if (isset($_GET['id'])) {
-    $fileId = basename($_GET['id']); // Security: prevents directory traversal
-    $filePath = 'uploads/' . $fileId;
+if (isset($_GET['dir']) && isset($_GET['file'])) {
+    $dir = basename($_GET['dir']);
+    $file = basename($_GET['file']);
+    $filePath = "uploads/$dir/$file";
 
     if (file_exists($filePath)) {
-        // Headers to force download
-        header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $fileId . '"');
-        header('Expires: 0');
-        header('Cache-Control: must-revalidate');
-        header('Pragma: public');
-        header('Content-Length: ' . filesize($filePath));
-        
+        header('Content-Disposition: attachment; filename="' . $file . '"');
         readfile($filePath);
         exit;
-    } else {
-        die("Invalid or expired link.");
     }
 }
-?>
+die("File not found.");
